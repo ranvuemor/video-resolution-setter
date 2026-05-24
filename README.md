@@ -2,6 +2,13 @@
 
 A Chrome/Edge Manifest V3 extension that applies a preferred video quality when a page exposes quality choices.
 
+## Features
+
+- Choose a preferred video resolution.
+- Apply automatically on supported video pages.
+- Ignore specific websites when generic detection causes issues.
+- Toolbar popup for quick changes.
+
 ## How it chooses quality
 
 If the preferred resolution is available, the extension selects it. If not, it selects the next best lower quality. For example, with a preferred resolution of 1440p, a video that only offers 1080p and 720p will use 1080p.
