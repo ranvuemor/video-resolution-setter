@@ -30,6 +30,14 @@ let applyTimer = 0;
 let pageBridgeInjected = false;
 let lastAppliedSignature = "";
 
+function isYouTubeHost() {
+  return /(^|\.)youtube\.com$/i.test(location.hostname);
+}
+
+function isYouTubePlayerPage() {
+  return ["/watch", "/embed/", "/shorts/", "/live/"].some((path) => location.pathname.startsWith(path));
+}
+
 function normalizeHostname(value) {
   const trimmed = String(value || "").trim().toLowerCase();
   if (!trimmed) {
@@ -69,6 +77,34 @@ function visible(element) {
   return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
 }
 
+function visibleVideos() {
+  return [...document.querySelectorAll("video")].filter(visible);
+}
+
+function videoControlRoots() {
+  const roots = new Set();
+
+  for (const video of visibleVideos()) {
+    const explicitRoot = video.closest([
+      ".html5-video-player",
+      ".video-js",
+      ".jwplayer",
+      ".plyr",
+      ".mejs__container",
+      "[data-player]",
+      "[data-video-player]",
+      "[class*='player']",
+      "[class*='Player']",
+      "[class*='video']",
+      "[class*='Video']"
+    ].join(", "));
+
+    roots.add(explicitRoot || video.parentElement);
+  }
+
+  return [...roots].filter((root) => root instanceof HTMLElement && visible(root));
+}
+
 function textFor(element) {
   return [
     element.textContent,
@@ -100,17 +136,35 @@ function chooseHeight(heights, preferredHeight) {
   return ranked.find((height) => height <= preferredHeight) ?? ranked[ranked.length - 1] ?? 0;
 }
 
-function candidateControls() {
-  return [...document.querySelectorAll("button, [role='button'], [aria-label], [title], select")]
+function candidateControls(root) {
+  return [...root.querySelectorAll("button, [role='button'], [aria-label], [title], select")]
     .filter(visible)
     .filter((element) => QUALITY_MENU_PATTERNS.some((pattern) => pattern.test(textFor(element))));
 }
 
-function qualityOptions() {
-  return [...document.querySelectorAll("button, [role='button'], [role='menuitem'], [role='option'], li, span, div, option")]
+function qualityOptions(root = document) {
+  return [...root.querySelectorAll("button, [role='button'], [role='menuitem'], [role='option'], li, span, div, option")]
     .filter(visible)
     .map((element) => ({ element, height: heightFromText(textFor(element)) }))
     .filter((entry) => entry.height > 0);
+}
+
+function qualityOptionRoots(playerRoots) {
+  const menuRoots = [...document.querySelectorAll([
+    "[role='menu']",
+    "[role='listbox']",
+    "[role='dialog']",
+    ".ytp-panel",
+    ".vjs-menu",
+    ".jw-settings-menu",
+    ".plyr__menu",
+    "[class*='quality']",
+    "[class*='Quality']",
+    "[class*='resolution']",
+    "[class*='Resolution']"
+  ].join(", "))].filter(visible);
+
+  return [...new Set([...playerRoots, ...menuRoots])];
 }
 
 function clickElement(element) {
@@ -120,8 +174,8 @@ function clickElement(element) {
   element.click();
 }
 
-function applyNativeSelect(preferredHeight) {
-  const selects = [...document.querySelectorAll("select")].filter(visible);
+function applyNativeSelect(preferredHeight, roots) {
+  const selects = roots.flatMap((root) => [...root.querySelectorAll("select")]).filter(visible);
 
   for (const select of selects) {
     const options = [...select.options].map((option) => ({
@@ -143,17 +197,22 @@ function applyNativeSelect(preferredHeight) {
 }
 
 async function applyGenericQuality(preferredHeight) {
-  const selectResult = applyNativeSelect(preferredHeight);
+  const roots = videoControlRoots();
+  if (!roots.length) {
+    return { applied: false, reason: "No visible video player found." };
+  }
+
+  const selectResult = applyNativeSelect(preferredHeight, roots);
   if (selectResult.applied) {
     return selectResult;
   }
 
-  const controls = candidateControls();
+  const controls = roots.flatMap(candidateControls);
   for (const control of controls.slice(0, 6)) {
     clickElement(control);
     await new Promise((resolve) => setTimeout(resolve, 180));
 
-    const options = qualityOptions();
+    const options = qualityOptionRoots(roots).flatMap(qualityOptions);
     const selectedHeight = chooseHeight(options.map((entry) => entry.height), preferredHeight);
     const selected = options.find((entry) => entry.height === selectedHeight);
     if (selected) {
@@ -211,18 +270,24 @@ async function applyResolution(settings = currentSettings) {
     return { applied: false, reason: "Disabled or no video found." };
   }
 
-  const videos = [...document.querySelectorAll("video")];
+  if (isYouTubeHost() && !isYouTubePlayerPage()) {
+    return { applied: false, reason: "YouTube page does not have a playback player." };
+  }
+
+  const videos = visibleVideos();
+  if (!videos.length) {
+    return { applied: false, reason: "No visible video found." };
+  }
+
   const signature = `${location.href}|${settings.preferredHeight}|${videos.length}|${videos.map((video) => video.currentSrc || video.src).join("|")}`;
   if (signature === lastAppliedSignature) {
     return { applied: false, reason: "Already applied for this video state." };
   }
 
   let result = { applied: false };
-  if (location.hostname.includes("youtube.com")) {
+  if (isYouTubeHost()) {
     result = await applyYouTubeQuality(settings.preferredHeight);
-  }
-
-  if (!result.applied) {
+  } else {
     result = await applyGenericQuality(settings.preferredHeight);
   }
 
