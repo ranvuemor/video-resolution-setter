@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Video Resolution Setter</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="panel">
+      <header>
+        <h1>Video Quality</h1>
+        <p>Choose the preferred resolution for playing videos.</p>
+      </header>
+
+      <label class="field" for="resolution">
+        <span>Preferred resolution</span>
+        <select id="resolution">
+          <option value="4320">8K</option>
+          <option value="2160">4K</option>
+          <option value="1440">2K / 1440p</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+          <option value="240">240p</option>
+          <option value="144">144p</option>
+        </select>
+      </label>
+
+      <label class="toggle">
+        <input id="enabled" type="checkbox">
+        <span>Apply automatically</span>
+      </label>
+
+      <button id="apply" type="button">Apply to this tab</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
