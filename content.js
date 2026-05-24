@@ -1,6 +1,7 @@
 const DEFAULT_SETTINGS = {
   enabled: true,
-  preferredHeight: 1440
+  preferredHeight: 1440,
+  ignoredSites: []
 };
 
 const QUALITY_LABELS = [
@@ -28,6 +29,35 @@ let currentSettings = { ...DEFAULT_SETTINGS };
 let applyTimer = 0;
 let pageBridgeInjected = false;
 let lastAppliedSignature = "";
+
+function normalizeHostname(value) {
+  const trimmed = String(value || "").trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    return new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`).hostname
+      .replace(/^\*\./, "")
+      .replace(/^www\./, "")
+      .replace(/^\.+/, "");
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//, "")
+      .split(/[/?#:]/)[0]
+      .replace(/^\*\./, "")
+      .replace(/^www\./, "")
+      .replace(/^\.+/, "");
+  }
+}
+
+function isIgnoredSite(settings = currentSettings) {
+  const currentHost = normalizeHostname(location.hostname);
+  return (settings.ignoredSites || [])
+    .map(normalizeHostname)
+    .filter(Boolean)
+    .some((ignoredHost) => currentHost === ignoredHost || currentHost.endsWith(`.${ignoredHost}`));
+}
 
 function visible(element) {
   if (!(element instanceof HTMLElement)) {
@@ -173,6 +203,10 @@ function applyYouTubeQuality(preferredHeight) {
 }
 
 async function applyResolution(settings = currentSettings) {
+  if (isIgnoredSite(settings)) {
+    return { applied: false, ignored: true, reason: "This site is ignored." };
+  }
+
   if (!settings.enabled || !document.querySelector("video")) {
     return { applied: false, reason: "Disabled or no video found." };
   }

@@ -33,6 +33,17 @@
         <span>Apply automatically</span>
       </label>
 
+      <section class="ignore-panel" aria-labelledby="ignored-sites-heading">
+        <div class="section-title">
+          <h2 id="ignored-sites-heading">Ignored websites</h2>
+          <button id="ignore-current" class="secondary" type="button">Ignore this site</button>
+        </div>
+        <label class="field" for="ignored-sites">
+          <span>One domain per line</span>
+          <textarea id="ignored-sites" rows="5" spellcheck="false" placeholder="x.com&#10;example.com"></textarea>
+        </label>
+      </section>
+
       <button id="apply" type="button">Apply to this tab</button>
       <p id="status" role="status" aria-live="polite"></p>
     </main>

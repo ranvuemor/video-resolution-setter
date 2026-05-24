@@ -46,6 +46,13 @@ h1 {
   letter-spacing: 0;
 }
 
+h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
 p {
   margin: 0;
   color: var(--muted);
@@ -58,18 +65,31 @@ p {
 }
 
 select,
-button {
+button,
+textarea {
   width: 100%;
-  min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
   font: inherit;
+}
+
+select,
+button {
+  min-height: 38px;
 }
 
 select {
   background: var(--control);
   color: var(--text);
   padding: 0 10px;
+}
+
+textarea {
+  min-height: 86px;
+  resize: vertical;
+  background: var(--control);
+  color: var(--text);
+  padding: 9px 10px;
 }
 
 .toggle {
@@ -96,6 +116,29 @@ button {
 
 button:active {
   transform: translateY(1px);
+}
+
+.ignore-panel {
+  display: grid;
+  gap: 9px;
+}
+
+.section-title {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.secondary {
+  width: auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: var(--line);
+  background: var(--control);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 #status {

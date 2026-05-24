@@ -21,3 +21,7 @@ Browsers do not provide one universal API for forcing resolution on arbitrary HT
 4. Select this folder.
 
 Use the toolbar popup to choose the preferred resolution and apply it to the current tab.
+
+## Ignore websites
+
+Some sites use video controls that do not behave well with generic quality detection. Add those domains to **Ignored websites** in the toolbar popup, one per line, or open the site and choose **Ignore this site**. Ignored domains also cover their subdomains, so adding `x.com` ignores `x.com` and `mobile.x.com`.
