@@ -16,7 +16,9 @@ If the preferred resolution is available, the extension selects it. If not, it s
 ## Current support
 
 - YouTube uses the page player API and is the most reliable target.
+- Video.js, JW Player, and Plyr are detected before the generic fallback.
 - Other websites are handled with a best-effort generic adapter that looks for visible quality or resolution menus, including nested menus such as **Advanced > Resolution**.
+- Thumbnail/feed preview videos are ignored unless they expose real player signals.
 
 Browsers do not provide one universal API for forcing resolution on arbitrary HTML videos. Many sites use custom adaptive streaming players, so some sites may ignore quality changes or hide the quality menu from extensions.
 

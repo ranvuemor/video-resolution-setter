@@ -44,6 +44,84 @@ const INTERACTIVE_MENU_SELECTOR = [
   ".plyr__control"
 ].join(", ");
 
+const PLAYER_ADAPTERS = [
+  {
+    name: "videojs",
+    rootSelector: ".video-js",
+    controlSelectors: [
+      ".vjs-quality-selector",
+      ".vjs-resolution-button",
+      ".vjs-quality-menu-button",
+      ".vjs-resolution-menu-button",
+      ".vjs-menu-button",
+      "[aria-label*='quality' i]",
+      "[aria-label*='resolution' i]",
+      "[title*='quality' i]",
+      "[title*='resolution' i]"
+    ],
+    optionRootSelectors: [".vjs-menu"]
+  },
+  {
+    name: "jwplayer",
+    rootSelector: ".jwplayer",
+    controlSelectors: [
+      ".jw-icon-settings",
+      ".jw-icon-hd",
+      ".jw-settings-quality",
+      ".jw-settings-submenu-button",
+      "[aria-label*='quality' i]",
+      "[aria-label*='settings' i]"
+    ],
+    optionRootSelectors: [".jw-settings-menu", ".jw-settings-submenu-quality"]
+  },
+  {
+    name: "plyr",
+    rootSelector: ".plyr",
+    controlSelectors: [
+      "button[data-plyr='settings']",
+      "button[data-plyr='quality']",
+      ".plyr__control",
+      "[aria-label*='quality' i]",
+      "[aria-label*='settings' i]"
+    ],
+    optionRootSelectors: [".plyr__menu"]
+  }
+];
+
+const PLAYER_ROOT_SELECTOR = [
+  ".html5-video-player",
+  ".video-js",
+  ".jwplayer",
+  ".plyr",
+  ".mejs__container",
+  "[data-player]",
+  "[data-video-player]",
+  "[class*='player']",
+  "[class*='Player']"
+].join(", ");
+
+const STRONG_PLAYER_ROOT_SELECTOR = [
+  ".html5-video-player",
+  ".video-js",
+  ".jwplayer",
+  ".plyr",
+  ".mejs__container",
+  "[data-player]",
+  "[data-video-player]"
+].join(", ");
+
+const THUMBNAIL_CONTEXT_SELECTOR = [
+  "a",
+  "article",
+  "li",
+  "[class*='thumb' i]",
+  "[class*='preview' i]",
+  "[class*='teaser' i]",
+  "[class*='tile' i]",
+  "[class*='card' i]",
+  "[class*='grid' i]"
+].join(", ");
+
 let currentSettings = { ...DEFAULT_SETTINGS };
 let applyTimer = 0;
 let pageBridgeInjected = false;
@@ -96,27 +174,74 @@ function visible(element) {
   return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
 }
 
+function playerRootFor(video) {
+  return video.closest(PLAYER_ROOT_SELECTOR);
+}
+
+function isPlayingVideo(video) {
+  return !video.paused && !video.ended && video.readyState > 2;
+}
+
+function isThumbnailVideo(video) {
+  return !video.controls
+    && !isPlayingVideo(video)
+    && !video.closest(STRONG_PLAYER_ROOT_SELECTOR)
+    && Boolean(video.closest(THUMBNAIL_CONTEXT_SELECTOR));
+}
+
+function videoScore(video) {
+  const rect = video.getBoundingClientRect();
+  const viewportArea = Math.max(window.innerWidth * window.innerHeight, 1);
+  const area = rect.width * rect.height;
+  const areaRatio = area / viewportArea;
+  const hasSource = Boolean(video.currentSrc || video.src || video.querySelector("source"));
+  const isPlaying = isPlayingVideo(video);
+  const hasControls = video.controls || Boolean(playerRootFor(video));
+  const longEnough = !Number.isFinite(video.duration) || video.duration === 0 || video.duration >= 20;
+
+  if (isThumbnailVideo(video)) {
+    return 0;
+  }
+
+  let score = 0;
+  if (hasSource) {
+    score += 2;
+  }
+  if (hasControls) {
+    score += 3;
+  }
+  if (isPlaying) {
+    score += 4;
+  }
+  if (longEnough) {
+    score += 1;
+  }
+  if (areaRatio >= 0.08) {
+    score += 4;
+  } else if (areaRatio >= 0.02) {
+    score += 2;
+  }
+  if (rect.width < 180 || rect.height < 100) {
+    score -= 4;
+  }
+
+  return score;
+}
+
 function visibleVideos() {
-  return [...document.querySelectorAll("video")].filter(visible);
+  return [...document.querySelectorAll("video")]
+    .filter(visible)
+    .map((video) => ({ video, score: videoScore(video) }))
+    .filter((entry) => entry.score >= 5)
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => entry.video);
 }
 
 function videoControlRoots() {
   const roots = new Set();
 
   for (const video of visibleVideos()) {
-    const explicitRoot = video.closest([
-      ".html5-video-player",
-      ".video-js",
-      ".jwplayer",
-      ".plyr",
-      ".mejs__container",
-      "[data-player]",
-      "[data-video-player]",
-      "[class*='player']",
-      "[class*='Player']",
-      "[class*='video']",
-      "[class*='Video']"
-    ].join(", "));
+    const explicitRoot = playerRootFor(video);
 
     roots.add(explicitRoot || video.parentElement);
   }
@@ -194,6 +319,18 @@ function qualityOptionRoots(playerRoots) {
   return [...new Set([...playerRoots, ...menuRoots])];
 }
 
+function queryVisible(selector, root = document) {
+  try {
+    return [...root.querySelectorAll(selector)].filter(visible);
+  } catch {
+    return [];
+  }
+}
+
+function uniqueElements(elements) {
+  return [...new Set(elements)].filter((element) => element instanceof HTMLElement);
+}
+
 function clickElement(element) {
   element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, cancelable: true, view: window }));
   element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
@@ -221,6 +358,26 @@ function applyNativeSelect(preferredHeight, roots) {
   }
 
   return { applied: false };
+}
+
+function adapterRoots(adapter) {
+  return queryVisible(adapter.rootSelector);
+}
+
+function adapterControls(adapter, roots) {
+  const explicitControls = roots.flatMap((root) =>
+    adapter.controlSelectors.flatMap((selector) => queryVisible(selector, root))
+  );
+  const textControls = roots.flatMap(candidateControls);
+
+  return uniqueElements([...explicitControls, ...textControls]);
+}
+
+function adapterOptionRoots(adapter, roots) {
+  const optionRoots = (adapter.optionRootSelectors || [])
+    .flatMap((selector) => queryVisible(selector));
+
+  return uniqueElements([...roots, ...optionRoots]);
 }
 
 async function selectVisibleQualityOption(preferredHeight, roots) {
@@ -262,6 +419,42 @@ async function applyNestedQualityMenu(preferredHeight, roots, depth = 0, visited
   return { applied: false };
 }
 
+async function applyPlayerAdapter(adapter, preferredHeight) {
+  const roots = adapterRoots(adapter);
+  if (!roots.length) {
+    return { applied: false };
+  }
+
+  const selectResult = applyNativeSelect(preferredHeight, roots);
+  if (selectResult.applied) {
+    return { ...selectResult, site: `${adapter.name}-select` };
+  }
+
+  const controls = adapterControls(adapter, roots);
+  for (const control of controls.slice(0, 8)) {
+    clickElement(control);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    const menuResult = await applyNestedQualityMenu(preferredHeight, adapterOptionRoots(adapter, roots));
+    if (menuResult.applied) {
+      return { ...menuResult, site: adapter.name };
+    }
+  }
+
+  return { applied: false };
+}
+
+async function applyKnownPlayerQuality(preferredHeight) {
+  for (const adapter of PLAYER_ADAPTERS) {
+    const result = await applyPlayerAdapter(adapter, preferredHeight);
+    if (result.applied) {
+      return result;
+    }
+  }
+
+  return { applied: false };
+}
+
 async function applyGenericQuality(preferredHeight) {
   const roots = videoControlRoots();
   if (!roots.length) {
@@ -271,6 +464,11 @@ async function applyGenericQuality(preferredHeight) {
   const selectResult = applyNativeSelect(preferredHeight, roots);
   if (selectResult.applied) {
     return selectResult;
+  }
+
+  const knownPlayerResult = await applyKnownPlayerQuality(preferredHeight);
+  if (knownPlayerResult.applied) {
+    return knownPlayerResult;
   }
 
   const controls = roots.flatMap(candidateControls);
