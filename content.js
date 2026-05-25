@@ -25,6 +25,25 @@ const QUALITY_MENU_PATTERNS = [
   /cog/i
 ];
 
+const QUALITY_SUBMENU_PATTERNS = [
+  /quality/i,
+  /resolution/i,
+  /advanced/i
+];
+
+const INTERACTIVE_MENU_SELECTOR = [
+  "button",
+  "[role='button']",
+  "[role='menuitem']",
+  "[aria-label]",
+  "[title]",
+  "[data-title]",
+  "[data-tooltip]",
+  ".vjs-menu-item",
+  ".jw-settings-content-item",
+  ".plyr__control"
+].join(", ");
+
 let currentSettings = { ...DEFAULT_SETTINGS };
 let applyTimer = 0;
 let pageBridgeInjected = false;
@@ -149,6 +168,14 @@ function qualityOptions(root = document) {
     .filter((entry) => entry.height > 0);
 }
 
+function qualitySubmenuControls(roots) {
+  return roots
+    .flatMap((root) => [...root.querySelectorAll(INTERACTIVE_MENU_SELECTOR)])
+    .filter(visible)
+    .filter((element) => heightFromText(textFor(element)) === 0)
+    .filter((element) => QUALITY_SUBMENU_PATTERNS.some((pattern) => pattern.test(textFor(element))));
+}
+
 function qualityOptionRoots(playerRoots) {
   const menuRoots = [...document.querySelectorAll([
     "[role='menu']",
@@ -196,6 +223,45 @@ function applyNativeSelect(preferredHeight, roots) {
   return { applied: false };
 }
 
+async function selectVisibleQualityOption(preferredHeight, roots) {
+  const options = qualityOptionRoots(roots).flatMap(qualityOptions);
+  const selectedHeight = chooseHeight(options.map((entry) => entry.height), preferredHeight);
+  const selected = options.find((entry) => entry.height === selectedHeight);
+
+  if (!selected) {
+    return { applied: false };
+  }
+
+  clickElement(selected.element);
+  return { applied: true, site: "generic-menu", height: selectedHeight };
+}
+
+async function applyNestedQualityMenu(preferredHeight, roots, depth = 0, visited = new WeakSet()) {
+  const optionResult = await selectVisibleQualityOption(preferredHeight, roots);
+  if (optionResult.applied || depth >= 3) {
+    return optionResult;
+  }
+
+  const submenuControls = qualitySubmenuControls(qualityOptionRoots(roots))
+    .filter((control) => !visited.has(control));
+
+  for (const control of submenuControls.slice(0, 8)) {
+    visited.add(control);
+    clickElement(control);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    const nestedResult = await applyNestedQualityMenu(preferredHeight, roots, depth + 1, visited);
+    if (nestedResult.applied) {
+      return {
+        ...nestedResult,
+        site: depth === 0 ? "generic-nested-menu" : nestedResult.site
+      };
+    }
+  }
+
+  return { applied: false };
+}
+
 async function applyGenericQuality(preferredHeight) {
   const roots = videoControlRoots();
   if (!roots.length) {
@@ -212,12 +278,9 @@ async function applyGenericQuality(preferredHeight) {
     clickElement(control);
     await new Promise((resolve) => setTimeout(resolve, 180));
 
-    const options = qualityOptionRoots(roots).flatMap(qualityOptions);
-    const selectedHeight = chooseHeight(options.map((entry) => entry.height), preferredHeight);
-    const selected = options.find((entry) => entry.height === selectedHeight);
-    if (selected) {
-      clickElement(selected.element);
-      return { applied: true, site: "generic-menu", height: selectedHeight };
+    const menuResult = await applyNestedQualityMenu(preferredHeight, roots);
+    if (menuResult.applied) {
+      return menuResult;
     }
   }
 
